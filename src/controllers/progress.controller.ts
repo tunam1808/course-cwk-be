@@ -10,7 +10,7 @@ export const ProgressController = {
         where: { userId },
         select: { courseId: true },
       });
-      res.json(progress.map((p) => p.courseId));
+      res.json(progress.map((p: { courseId: number }) => p.courseId));
     } catch (error) {
       res.status(500).json({ error });
     }
