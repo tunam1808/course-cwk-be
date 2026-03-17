@@ -42,7 +42,8 @@ export const AuthController = {
         },
       });
     } catch (error) {
-      res.status(500).json({ error });
+      console.error("LOGIN ERROR:", error);
+      res.status(500).json({ error: String(error) });
     }
   },
 };
