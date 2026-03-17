@@ -1,6 +1,7 @@
 import { PrismaClient } from "@prisma/client";
-import dotenv from "dotenv";
+import { PrismaMariaDb } from "@prisma/adapter-mariadb";
+import "dotenv/config";
 
-dotenv.config(); // đọc DATABASE_URL từ .env
+const adapter = new PrismaMariaDb(process.env.DATABASE_URL!);
 
-export const prisma = new PrismaClient();
+export const prisma = new PrismaClient({ adapter });
