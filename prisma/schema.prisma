@@ -16,21 +16,25 @@ model User {
   status    Boolean  @default(true)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
-  progress Progress[]
+  progress  Progress[]
+
+  @@map("user")
 }
 
 model Course {
   id         Int            @id @default(autoincrement())
   title      String
   category   CourseCategory
-  duration   Float?           
-  fileSize   Float?         
-  videoId   String?
-  fileHash   String?      
+  duration   Float?
+  fileSize   Float?
+  videoId    String?
+  fileHash   String?
   uploadedAt DateTime       @default(now())
   createdAt  DateTime       @default(now())
   updatedAt  DateTime       @updatedAt
-  progress Progress[]
+  progress   Progress[]
+
+  @@map("course")
 }
 
 model Progress {
@@ -41,13 +45,14 @@ model Progress {
   course    Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
   createdAt DateTime @default(now())
 
-  @@unique([userId, courseId]) // mỗi user chỉ có 1 record per course
+  @@unique([userId, courseId])
+  @@map("progress")
 }
 
 enum CourseCategory {
-  CAPCUT_AI      
-  BAT_DONG_SAN   
-  MIEN_PHI       
+  CAPCUT_AI
+  BAT_DONG_SAN
+  MIEN_PHI
 }
 
 enum Role {
