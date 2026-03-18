@@ -21,7 +21,6 @@ export const CourseController = {
     }
   },
 
-  // 👇 THÊM MỚI: Bước 1 - Tạo video slot trên Bunny → trả về videoId cho FE
   async prepareUpload(req: Request, res: Response) {
     try {
       const { title } = req.body;
@@ -32,7 +31,24 @@ export const CourseController = {
     }
   },
 
-  // 👇 THÊM MỚI: Bước 2 - FE upload xong → lưu vào DB
+  // 👇 THÊM MỚI: Tạo signature cho tus upload
+  async signUpload(req: Request, res: Response) {
+    try {
+      const { videoId } = req.body;
+      const expire = Math.floor(Date.now() / 1000) + 60 * 60;
+      const signature = crypto
+        .createHash("sha256")
+        .update(
+          `${process.env.BUNNY_LIBRARY_ID}${process.env.BUNNY_ACCESS_KEY}${expire}${videoId}`,
+        )
+        .digest("hex");
+
+      res.json({ signature, expire });
+    } catch (error) {
+      res.status(500).json({ error: String(error) });
+    }
+  },
+
   async saveCourse(req: Request, res: Response) {
     try {
       const { title, category, duration, fileSize, videoId } = req.body;
@@ -188,7 +204,6 @@ export const CourseController = {
         fs.unlinkSync(file.path);
       }
 
-      // 👇 Nếu FE truyền videoId mới (upload trực tiếp lên Bunny)
       if (videoId && videoId !== exist.videoId) {
         if (exist.videoId) await bunnyService.deleteVideo(exist.videoId);
         newVideoId = videoId;

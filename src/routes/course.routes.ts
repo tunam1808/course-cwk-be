@@ -19,6 +19,12 @@ router.post(
   authorizeAdmin,
   CourseController.prepareUpload,
 );
+router.post(
+  "/sign-upload",
+  authenticate,
+  authorizeAdmin,
+  CourseController.signUpload,
+);
 router.post("/save", authenticate, authorizeAdmin, CourseController.saveCourse);
 router.post(
   "/",
