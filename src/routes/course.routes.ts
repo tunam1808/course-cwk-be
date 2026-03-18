@@ -6,13 +6,20 @@ import { authenticate, authorizeAdmin } from "../middlewares/auth.middleware";
 const upload = multer({
   dest: "uploads/",
   limits: {
-    fileSize: 6 * 1024 * 1024 * 1024, // 👈 6GB
+    fileSize: 6 * 1024 * 1024 * 1024,
   },
 });
 
 const router = Router();
 
 router.get("/", CourseController.getCourses);
+router.post(
+  "/prepare-upload",
+  authenticate,
+  authorizeAdmin,
+  CourseController.prepareUpload,
+);
+router.post("/save", authenticate, authorizeAdmin, CourseController.saveCourse);
 router.post(
   "/",
   authenticate,

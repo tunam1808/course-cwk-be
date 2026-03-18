@@ -21,10 +21,39 @@ export const CourseController = {
     }
   },
 
+  // 👇 THÊM MỚI: Bước 1 - Tạo video slot trên Bunny → trả về videoId cho FE
+  async prepareUpload(req: Request, res: Response) {
+    try {
+      const { title } = req.body;
+      const videoId = await bunnyService.createVideo(title);
+      res.json({ videoId });
+    } catch (error) {
+      res.status(500).json({ error: String(error) });
+    }
+  },
+
+  // 👇 THÊM MỚI: Bước 2 - FE upload xong → lưu vào DB
+  async saveCourse(req: Request, res: Response) {
+    try {
+      const { title, category, duration, fileSize, videoId } = req.body;
+      const course = await prisma.course.create({
+        data: {
+          title,
+          category,
+          duration: duration ? Number(duration) : null,
+          fileSize: fileSize ? Number(fileSize) : null,
+          videoId: videoId || null,
+        },
+      });
+      res.json({ message: "Tạo khóa học thành công", course });
+    } catch (error) {
+      res.status(500).json({ error: String(error) });
+    }
+  },
+
   async createCourse(req: Request, res: Response) {
     const file = req.file;
 
-    // 👈 Khi FE hủy request → xóa file tạm
     req.on("close", () => {
       if (!res.writableEnded) {
         if (file && fs.existsSync(file.path)) {
@@ -41,7 +70,6 @@ export const CourseController = {
       let fileHash = null;
 
       if (file) {
-        // Kiểm tra request đã bị hủy chưa
         if (req.socket.destroyed) {
           if (fs.existsSync(file.path)) fs.unlinkSync(file.path);
           return;
@@ -59,7 +87,6 @@ export const CourseController = {
           });
         }
 
-        // Kiểm tra lại trước khi upload Bunny
         if (req.socket.destroyed) {
           if (fs.existsSync(file.path)) fs.unlinkSync(file.path);
           return;
@@ -67,10 +94,9 @@ export const CourseController = {
 
         videoId = await bunnyService.createVideo(title);
 
-        // Kiểm tra lại sau khi tạo video slot
         if (req.socket.destroyed) {
           if (fs.existsSync(file.path)) fs.unlinkSync(file.path);
-          if (videoId) await bunnyService.deleteVideo(videoId); // xóa slot vừa tạo
+          if (videoId) await bunnyService.deleteVideo(videoId);
           return;
         }
 
@@ -99,7 +125,6 @@ export const CourseController = {
   async updateCourse(req: Request, res: Response) {
     const file = req.file;
 
-    // 👈 Khi FE hủy request → xóa file tạm
     req.on("close", () => {
       if (!res.writableEnded) {
         if (file && fs.existsSync(file.path)) {
@@ -111,7 +136,7 @@ export const CourseController = {
 
     try {
       const { id } = req.params;
-      const { title, category, duration, fileSize } = req.body;
+      const { title, category, duration, fileSize, videoId } = req.body;
 
       const exist = await prisma.course.findUnique({
         where: { id: Number(id) },
@@ -121,7 +146,7 @@ export const CourseController = {
         return res.status(404).json({ message: "Khóa học không tồn tại" });
       }
 
-      let videoId = exist.videoId;
+      let newVideoId = exist.videoId;
       let fileHash = exist.fileHash;
 
       if (file) {
@@ -151,16 +176,22 @@ export const CourseController = {
           await bunnyService.deleteVideo(exist.videoId);
         }
 
-        videoId = await bunnyService.createVideo(title);
+        newVideoId = await bunnyService.createVideo(title);
 
         if (req.socket.destroyed) {
           if (fs.existsSync(file.path)) fs.unlinkSync(file.path);
-          if (videoId) await bunnyService.deleteVideo(videoId);
+          if (newVideoId) await bunnyService.deleteVideo(newVideoId);
           return;
         }
 
-        await bunnyService.uploadVideo(videoId, file.path);
+        await bunnyService.uploadVideo(newVideoId, file.path);
         fs.unlinkSync(file.path);
+      }
+
+      // 👇 Nếu FE truyền videoId mới (upload trực tiếp lên Bunny)
+      if (videoId && videoId !== exist.videoId) {
+        if (exist.videoId) await bunnyService.deleteVideo(exist.videoId);
+        newVideoId = videoId;
       }
 
       const course = await prisma.course.update({
@@ -170,7 +201,7 @@ export const CourseController = {
           category,
           duration: duration ? Number(duration) : null,
           fileSize: fileSize ? Number(fileSize) : null,
-          videoId,
+          videoId: newVideoId,
           fileHash,
         },
       });
