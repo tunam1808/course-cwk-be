@@ -15,7 +15,12 @@ const app = express();
 // middleware
 app.use(
   cors({
-    origin: ["http://localhost:3000", "https://course-cwk.vercel.app"], // Domain FE
+    origin: [
+      "http://localhost:3000",
+      "https://course-cwk.vercel.app",
+      "https://coursecwk.com",
+      "https://www.coursecwk.com",
+    ], // Domain FE
   }),
 );
 
