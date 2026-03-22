@@ -13,6 +13,12 @@ const upload = multer({
 const router = Router();
 
 router.get("/", CourseController.getCourses);
+router.put(
+  "/reorder",
+  authenticate,
+  authorizeAdmin,
+  CourseController.reorderCourses,
+); // router kéo thả bài học nếu sai thứ tự
 router.post(
   "/prepare-upload",
   authenticate,

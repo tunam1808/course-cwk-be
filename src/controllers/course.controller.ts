@@ -13,9 +13,29 @@ export const CourseController = {
   async getCourses(req: Request, res: Response) {
     try {
       const courses = await prisma.course.findMany({
-        orderBy: { uploadedAt: "asc" },
+        orderBy: { order: "asc" }, // 👈 sort theo order
       });
       res.json(courses);
+    } catch (error) {
+      res.status(500).json({ error });
+    }
+  },
+
+  // 👈 Thêm reorderCourses
+  async reorderCourses(req: Request, res: Response) {
+    try {
+      const { orders } = req.body; // [{ id: 1, order: 0 }, { id: 2, order: 1 }, ...]
+
+      await Promise.all(
+        orders.map(({ id, order }: { id: number; order: number }) =>
+          prisma.course.update({
+            where: { id },
+            data: { order },
+          }),
+        ),
+      );
+
+      res.json({ message: "Cập nhật thứ tự thành công" });
     } catch (error) {
       res.status(500).json({ error });
     }
@@ -31,7 +51,6 @@ export const CourseController = {
     }
   },
 
-  // 👇 THÊM MỚI: Tạo signature cho tus upload
   async signUpload(req: Request, res: Response) {
     try {
       const { videoId } = req.body;
@@ -52,6 +71,13 @@ export const CourseController = {
   async saveCourse(req: Request, res: Response) {
     try {
       const { title, category, duration, fileSize, videoId } = req.body;
+
+      // Lấy order cao nhất hiện tại
+      const maxOrder = await prisma.course.findFirst({
+        orderBy: { order: "desc" },
+        select: { order: true },
+      });
+
       const course = await prisma.course.create({
         data: {
           title,
@@ -59,6 +85,7 @@ export const CourseController = {
           duration: duration ? Number(duration) : null,
           fileSize: fileSize ? Number(fileSize) : null,
           videoId: videoId || null,
+          order: (maxOrder?.order ?? -1) + 1, // 👈 tự động set order
         },
       });
       res.json({ message: "Tạo khóa học thành công", course });
@@ -120,6 +147,11 @@ export const CourseController = {
         fs.unlinkSync(file.path);
       }
 
+      const maxOrder = await prisma.course.findFirst({
+        orderBy: { order: "desc" },
+        select: { order: true },
+      });
+
       const course = await prisma.course.create({
         data: {
           title,
@@ -128,6 +160,7 @@ export const CourseController = {
           fileSize: fileSize ? Number(fileSize) : null,
           videoId,
           fileHash,
+          order: (maxOrder?.order ?? -1) + 1, // 👈 tự động set order
         },
       });
 

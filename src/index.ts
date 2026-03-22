@@ -20,12 +20,12 @@ app.use(
       "https://course-cwk.vercel.app",
       "https://coursecwk.com",
       "https://www.coursecwk.com",
-    ], // Domain FE
+    ],
   }),
 );
 
-app.use(express.json({ limit: "6gb" })); // 👈 tăng limit
-app.use(express.urlencoded({ limit: "6gb", extended: true })); // 👈 thêm
+app.use(express.json({ limit: "6gb" }));
+app.use(express.urlencoded({ limit: "6gb", extended: true }));
 
 app.use("/api/auth", authRoutes);
 app.use("/api/users", userRoutes);
@@ -39,6 +39,10 @@ app.get("/", (req, res) => {
 
 const PORT = process.env.PORT || 4000;
 
-app.listen(PORT, () => {
+// 👈 Tăng timeout lên 30 phút
+const server = app.listen(PORT, () => {
   console.log(`Server đang chạy tại http://localhost:${PORT}`);
 });
+
+server.timeout = 30 * 60 * 1000;
+server.keepAliveTimeout = 30 * 60 * 1000;
