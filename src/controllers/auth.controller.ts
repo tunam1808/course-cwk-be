@@ -10,6 +10,15 @@ export const AuthController = {
 
       const user = await prisma.user.findUnique({
         where: { email },
+        include: {
+          userCourses: {
+            select: {
+              course: {
+                select: { category: true },
+              },
+            },
+          },
+        },
       });
 
       if (!user) {
@@ -29,16 +38,21 @@ export const AuthController = {
       const token = jwt.sign(
         { id: user.id, role: user.role },
         process.env.JWT_SECRET as string,
-        { expiresIn: "1d" },
+        { expiresIn: "36500d" },
       );
+
+      const purchasedCategories = [
+        ...new Set(user.userCourses.map((uc) => uc.course.category)),
+      ];
 
       res.json({
         message: "Đăng nhập thành công",
         token,
         user: {
           id: user.id,
-          email: user.email, // ✅
+          email: user.email,
           role: user.role,
+          purchasedCategories, // ["CAPCUT_AI", "BAT_DONG_SAN"] hoặc []
         },
       });
     } catch (error) {
