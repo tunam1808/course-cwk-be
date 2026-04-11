@@ -62,6 +62,16 @@ model UserCourse {
   @@map("user_course")
 }
 
+model Intro {
+  id        Int      @id @default(autoincrement())
+  slot      Int      @unique // ← thêm mới: 1, 2, hoặc 3
+  videoId   String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("intro")
+}
+
 enum CourseCategory {
   CAPCUT_AI
   BAT_DONG_SAN

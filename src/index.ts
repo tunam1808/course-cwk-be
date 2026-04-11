@@ -7,6 +7,7 @@ import userRoutes from "./routes/user.routes";
 import courseRoutes from "./routes/course.routes";
 import progressRoutes from "./routes/progress.routes";
 import videoRoutes from "./routes/video.routes";
+import introRoute from "./routes/intro.router";
 
 dotenv.config();
 
@@ -32,6 +33,7 @@ app.use("/api/users", userRoutes);
 app.use("/api/courses", courseRoutes);
 app.use("/api/progress", progressRoutes);
 app.use("/api/videos", videoRoutes);
+app.use("/api/intro", introRoute);
 
 app.get("/", (req, res) => {
   res.send("Backend API running...");
