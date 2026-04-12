@@ -4,7 +4,7 @@ import { prisma } from "../database";
 import { bunnyService } from "../services/bunny.service";
 import crypto from "crypto";
 
-const VALID_SLOTS = [1, 2, 3] as const;
+const VALID_SLOTS = [1, 2, 3, 4, 5, 6] as const;
 type Slot = (typeof VALID_SLOTS)[number];
 
 function parseSlot(value: unknown): Slot | null {
@@ -15,7 +15,7 @@ function parseSlot(value: unknown): Slot | null {
 export const IntroController = {
   /**
    * GET /api/intro
-   * Trả về tất cả 3 slot intro
+   * Trả về tất cả 6 slot intro
    */
   async getIntro(_req: Request, res: Response) {
     try {
@@ -23,8 +23,8 @@ export const IntroController = {
         orderBy: { slot: "asc" },
       });
 
-      // Đảm bảo luôn trả về đủ 3 slot (nếu thiếu thì tạo placeholder)
-      const result = [1, 2, 3].map((slot) => {
+      // Đảm bảo luôn trả về đủ 6 slot (nếu thiếu thì tạo placeholder)
+      const result = [1, 2, 3, 4, 5, 6].map((slot) => {
         const existing = intros.find((i) => i.slot === slot);
         return (
           existing || { slot, videoId: null, createdAt: null, updatedAt: null }
@@ -43,7 +43,6 @@ export const IntroController = {
    */
   async prepareUpload(req: Request, res: Response) {
     try {
-      // Frontend hiện tại không gửi slot ở bước prepare
       const videoId = await bunnyService.createVideo("intro");
       res.json({ videoId });
     } catch (error) {
@@ -91,7 +90,9 @@ export const IntroController = {
         return res.status(400).json({ message: "Thiếu videoId" });
       }
       if (!parsedSlot) {
-        return res.status(400).json({ message: "slot phải là 1, 2 hoặc 3" });
+        return res
+          .status(400)
+          .json({ message: "slot phải là 1, 2, 3, 4, 5 hoặc 6" });
       }
 
       const existing = await prisma.intro.findUnique({
@@ -125,7 +126,9 @@ export const IntroController = {
     try {
       const slot = parseSlot(req.params.slot);
       if (!slot) {
-        return res.status(400).json({ message: "slot phải là 1, 2 hoặc 3" });
+        return res
+          .status(400)
+          .json({ message: "slot phải là 1, 2, 3, 4, 5 hoặc 6" });
       }
 
       const intro = await prisma.intro.findUnique({ where: { slot } });

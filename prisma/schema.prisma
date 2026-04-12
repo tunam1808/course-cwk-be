@@ -71,6 +71,16 @@ model Intro {
 
   @@map("intro")
 }
+model CountdownSetting {
+  id         Int       @id @default(1)
+  active     Boolean   @default(false)
+  visible    Boolean   @default(false)
+  startTime  DateTime?
+  durationMs BigInt?
+  updatedAt  DateTime  @updatedAt
+
+  @@map("countdown_setting") 
+}
 
 enum CourseCategory {
   CAPCUT_AI
