@@ -23,7 +23,7 @@ export const updateCountdown = async (req: Request, res: Response) => {
       active,
       visible,
       durationMs: durationMs ? BigInt(durationMs) : null,
-      ...(resetTimer && { startTime: active ? new Date() : null }), // ← chỉ reset khi bấm "Bắt đầu"
+      ...(resetTimer && { startTime: active ? new Date() : null }),
     },
     create: {
       id: 1,
@@ -41,4 +41,22 @@ export const updateCountdown = async (req: Request, res: Response) => {
       durationMs: setting.durationMs ? Number(setting.durationMs) : null,
     },
   });
+};
+
+// ─── Lucky Number ─────────────────────────────────────────────────────────────
+export const getLuckySetting = async (req: Request, res: Response) => {
+  const setting = await prisma.luckySetting.findUnique({ where: { id: 1 } });
+  res.json({ showLuckyNumber: setting?.showLuckyNumber ?? false });
+};
+
+export const updateLuckySetting = async (req: Request, res: Response) => {
+  const { showLuckyNumber } = req.body;
+
+  const setting = await prisma.luckySetting.upsert({
+    where: { id: 1 },
+    update: { showLuckyNumber },
+    create: { id: 1, showLuckyNumber },
+  });
+
+  res.json({ success: true, showLuckyNumber: setting.showLuckyNumber });
 };

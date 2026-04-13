@@ -82,6 +82,13 @@ model CountdownSetting {
   @@map("countdown_setting") 
 }
 
+model LuckySetting {
+  id              Int     @id @default(1)
+  showLuckyNumber Boolean @default(false)
+
+  @@map("lucky_setting")
+}
+
 enum CourseCategory {
   CAPCUT_AI
   BAT_DONG_SAN
