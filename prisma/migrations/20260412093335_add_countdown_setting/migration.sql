@@ -1,14 +1,5 @@
-/*
-  Warnings:
-
-  - You are about to drop the `countdownsetting` table. If the table is not empty, all the data it contains will be lost.
-
-*/
--- DropTable
-DROP TABLE `countdownsetting`;
-
 -- CreateTable
-CREATE TABLE `countdown_setting` (
+CREATE TABLE IF NOT EXISTS `countdown_setting` (
     `id` INTEGER NOT NULL DEFAULT 1,
     `active` BOOLEAN NOT NULL DEFAULT false,
     `visible` BOOLEAN NOT NULL DEFAULT false,
