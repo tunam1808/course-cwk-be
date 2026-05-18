@@ -1,0 +1,1 @@
+ALTER TABLE `resource_category` ADD COLUMN `isVip` BOOLEAN NOT NULL DEFAULT true;

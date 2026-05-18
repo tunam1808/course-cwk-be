@@ -9,6 +9,7 @@ import progressRoutes from "./routes/progress.routes";
 import videoRoutes from "./routes/video.routes";
 import introRoute from "./routes/intro.router";
 import countdownRouter from "./routes/countdown.router";
+import resourceRoutes from "./routes/resource.routes";
 
 dotenv.config();
 
@@ -36,6 +37,7 @@ app.use("/api/progress", progressRoutes);
 app.use("/api/videos", videoRoutes);
 app.use("/api/intro", introRoute);
 app.use("/api/countdown", countdownRouter);
+app.use("/api", resourceRoutes);
 
 app.get("/", (req, res) => {
   res.send("Backend API running...");

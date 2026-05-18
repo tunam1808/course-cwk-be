@@ -99,3 +99,65 @@ enum Role {
   ADMIN
   USER
 }
+
+// ── CẤP 1: Folder gốc ───────────────────────────────────────────────
+model ResourceCategory {
+  id           Int                  @id @default(autoincrement())
+  name         String
+  slug         String               @unique
+  order        Int                  @default(0)
+  isVip        Boolean              @default(true)  // true = chỉ VIP, false = tất cả user
+  thumbnailKey String?              // path trên Bunny, vd: "covers/uuid.jpg"
+  thumbnailUrl String?              @db.Text
+  subFolders   ResourceSubFolder[]
+  createdAt    DateTime             @default(now())
+  updatedAt    DateTime             @updatedAt
+
+  @@map("resource_category")
+}
+
+// ── CẤP 2: Folder con ───────────────────────────────────────────────
+model ResourceSubFolder {
+  id         Int              @id @default(autoincrement())
+  name       String
+  slug       String
+  order      Int              @default(0)
+  categoryId Int
+  category   ResourceCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  files      ResourceFile[]
+  createdAt  DateTime         @default(now())
+  updatedAt  DateTime         @updatedAt
+
+  @@unique([categoryId, slug])
+  @@index([categoryId])
+  @@map("resource_sub_folder")
+}
+
+// ── CẤP 3: File tài nguyên ──────────────────────────────────────────
+model ResourceFile {
+  id            Int               @id @default(autoincrement())
+  name          String
+  description   String?
+  subFolderId   Int
+  subFolder     ResourceSubFolder @relation(fields: [subFolderId], references: [id], onDelete: Cascade)
+  fileName      String            // tên file gốc khi upload
+  fileKey       String            // full path trên Bunny, vd: "resources/nhac-nen/lo-fi/uuid.mp3"
+  fileUrl       String            @db.Text
+  fileSize      Int               // bytes
+  mimeType      String
+  fileType      ResourceFileType
+  downloadCount Int               @default(0)
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+
+  @@index([subFolderId])
+  @@map("resource_file")
+}
+
+// ── Enum mới ─────────────────────────────────────────────────────────
+enum ResourceFileType {
+  MP3   // audio: mp3, wav, ogg, flac, aac
+  MP4   // video: mp4, mov, avi, webm
+  FONT  // font: ttf, otf, woff, woff2, zip
+  OTHER
+}
