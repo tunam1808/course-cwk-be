@@ -190,7 +190,7 @@ export const fileController = {
 
   /**
    * GET /resource-files?subFolderId=  (FE public)
-   * ✅ Chặn truy cập file thuộc category VIP
+   * ✅ Chặn truy cập file thuộc category VIP nếu chưa đăng nhập
    */
   publicFiles: wrap(async (req, res) => {
     const {
@@ -201,7 +201,7 @@ export const fileController = {
 
     if (subFolderId) {
       const isVip = await CategoryService.isSubFolderVip(Number(subFolderId));
-      if (isVip)
+      if (isVip && !req.user)
         return res.status(403).json({ message: "Nội dung chỉ dành cho VIP" });
     }
 
@@ -215,11 +215,11 @@ export const fileController = {
 
   /**
    * POST /resource-files/:id/download  (FE public — đếm lượt tải)
-   * ✅ Chặn đếm download nếu file thuộc category VIP
+   * ✅ Chặn download nếu file thuộc category VIP và chưa đăng nhập
    */
   trackDownload: wrap(async (req, res) => {
     const file = await FileService.getOne(Number(req.params.id));
-    if (file.subFolder.category.isVip)
+    if (file.subFolder.category.isVip && !req.user)
       return res.status(403).json({ message: "Nội dung chỉ dành cho VIP" });
     await FileService.incrementDownload(file.id);
     res.json({ success: true });

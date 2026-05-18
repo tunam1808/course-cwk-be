@@ -48,3 +48,23 @@ export const authorizeAdmin = (
   }
   next();
 };
+
+// Xác thực nếu có token, không có thì bỏ qua
+export const optionalAuthenticate = (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) => {
+  const token = req.headers.authorization?.split(" ")[1];
+  if (!token) return next();
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET as string) as {
+      id: number;
+      role: string;
+    };
+    req.user = decoded;
+  } catch {
+    // token sai/hết hạn → bỏ qua, không báo lỗi
+  }
+  next();
+};

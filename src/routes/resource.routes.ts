@@ -1,6 +1,10 @@
 // src/routes/resource.routes.ts
 import { Router } from "express";
-import { authenticate, authorizeAdmin } from "../middlewares/auth.middleware";
+import {
+  authenticate,
+  authorizeAdmin,
+  optionalAuthenticate,
+} from "../middlewares/auth.middleware";
 import {
   uploadResource,
   uploadThumbnail,
@@ -16,10 +20,22 @@ const router = Router();
 // ════════════════════════════════════════════════════════════════════
 // PUBLIC — FE gọi, không cần auth
 // ════════════════════════════════════════════════════════════════════
-router.get("/resource-categories/all", fileController.publicAllCategories);
-router.get("/resource-categories", fileController.publicCategories);
-router.get("/resource-files", fileController.publicFiles);
-router.post("/resource-files/:id/download", fileController.trackDownload);
+router.get(
+  "/resource-categories/all",
+  optionalAuthenticate,
+  fileController.publicAllCategories,
+);
+router.get(
+  "/resource-categories",
+  optionalAuthenticate,
+  fileController.publicCategories,
+);
+router.get("/resource-files", optionalAuthenticate, fileController.publicFiles);
+router.post(
+  "/resource-files/:id/download",
+  optionalAuthenticate,
+  fileController.trackDownload,
+);
 
 // ════════════════════════════════════════════════════════════════════
 // ADMIN — cần authenticate + authorizeAdmin
