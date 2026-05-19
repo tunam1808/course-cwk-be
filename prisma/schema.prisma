@@ -93,6 +93,7 @@ enum CourseCategory {
   CAPCUT_AI
   BAT_DONG_SAN
   MIEN_PHI
+  MOBILE
 }
 
 enum Role {
