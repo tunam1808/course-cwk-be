@@ -25,9 +25,17 @@ export const MIME_TO_FILE_TYPE: Record<string, ResourceFileType> = {
   "font/woff2": "FONT",
   "application/x-font-ttf": "FONT",
   "application/x-font-otf": "FONT",
-  "application/zip": "FONT", // zip chứa bộ font
+  "application/zip": "FONT",
   "application/x-zip-compressed": "FONT",
-  "application/octet-stream": "FONT", // fallback font bị detect sai mime
+  "application/octet-stream": "FONT",
+
+  // ✅ Image → IMAGE
+  "image/gif": "IMAGE",
+  "image/jpeg": "IMAGE",
+  "image/png": "IMAGE",
+
+  // ✅ LUT → LUT  (.cube bị detect là text/plain hoặc octet-stream)
+  "text/plain": "LUT",
 };
 
 export const ALLOWED_MIMES = Object.keys(MIME_TO_FILE_TYPE);

@@ -1,0 +1,2 @@
+ALTER TABLE `resource_file` 
+MODIFY COLUMN `fileType` ENUM('MP3','MP4','FONT','IMAGE','LUT','OTHER') NOT NULL;

@@ -160,5 +160,7 @@ enum ResourceFileType {
   MP3   // audio: mp3, wav, ogg, flac, aac
   MP4   // video: mp4, mov, avi, webm
   FONT  // font: ttf, otf, woff, woff2, zip
+  IMAGE // image: gif, jpeg, jpg, png
+  LUT   // lut màu: cube
   OTHER
 }
