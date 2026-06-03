@@ -230,4 +230,18 @@ export const fileController = {
     const data = await CategoryService.getAllPublic();
     res.json({ data });
   }),
+
+  /**
+   * GET /resource-subfolders/:id/download-zip  (public)
+   * ✅ Stream ZIP toàn bộ file trong subfolder về client
+   */
+  downloadZip: wrap(async (req, res) => {
+    const subFolderId = Number(req.params.id);
+
+    const isVip = await CategoryService.isSubFolderVip(subFolderId);
+    if (isVip && !req.user)
+      return res.status(403).json({ message: "Nội dung chỉ dành cho VIP" });
+
+    await FileService.streamZip(subFolderId, res);
+  }),
 };

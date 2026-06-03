@@ -37,6 +37,13 @@ router.post(
   fileController.trackDownload,
 );
 
+// ✅ Stream ZIP toàn bộ file trong subfolder
+router.get(
+  "/resource-subfolders/:id/download-zip",
+  optionalAuthenticate,
+  fileController.downloadZip,
+);
+
 // ════════════════════════════════════════════════════════════════════
 // ADMIN — cần authenticate + authorizeAdmin
 // ════════════════════════════════════════════════════════════════════

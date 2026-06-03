@@ -10,6 +10,7 @@
     "@prisma/adapter-mariadb": "^7.4.2",
     "@prisma/adapter-pg": "^7.4.2",
     "@prisma/client": "^7.5.0",
+    "archiver": "^8.0.0",
     "axios": "^1.16.0",
     "bcrypt": "^6.0.0",
     "bcryptjs": "^3.0.3",
@@ -24,6 +25,7 @@
     "uuid": "^14.0.0"
   },
   "devDependencies": {
+    "@types/archiver": "^7.0.0",
     "@types/bcrypt": "^6.0.0",
     "@types/bcryptjs": "^3.0.0",
     "@types/cors": "^2.8.19",

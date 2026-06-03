@@ -4,6 +4,9 @@ import { ResourceFileType } from "@prisma/client";
 import { v4 as uuidv4 } from "uuid";
 import { bunnyStorageService } from "./bunny-storage.service";
 import { MIME_TO_FILE_TYPE } from "../types/resource.types";
+import archiver from "archiver";
+import { Readable } from "stream";
+import type { Response } from "express";
 
 export class FileService {
   /** Detect fileType ưu tiên extension trước, fallback sang MIME */
@@ -121,5 +124,59 @@ export class FileService {
       where: { id },
       data: { downloadCount: { increment: 1 } },
     });
+  }
+
+  /** Stream ZIP toàn bộ file trong subfolder về client */
+  static async streamZip(subFolderId: number, res: Response) {
+    const [files, sub] = await Promise.all([
+      prisma.resourceFile.findMany({
+        where: { subFolderId },
+        orderBy: { createdAt: "desc" },
+      }),
+      prisma.resourceSubFolder.findUnique({
+        where: { id: subFolderId },
+      }),
+    ]);
+
+    if (files.length === 0) {
+      throw new Error("Folder không có file nào");
+    }
+
+    const zipName = `${sub?.name ?? "folder"}.zip`;
+
+    res.setHeader("Content-Type", "application/zip");
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename="${encodeURIComponent(zipName)}"`,
+    );
+
+    const archive = archiver("zip", { zlib: { level: 1 } });
+    archive.pipe(res);
+
+    for (const file of files) {
+      try {
+        const response = await fetch(file.fileUrl);
+        if (!response.ok || !response.body) continue;
+
+        const nodeStream = Readable.fromWeb(response.body as any);
+
+        const urlExt = file.fileUrl
+          .split("?")[0]
+          .match(/\.([a-zA-Z0-9]+)$/)?.[1];
+        const nameHasExt = /\.[a-zA-Z0-9]{2,5}$/.test(file.name);
+        const fileName = nameHasExt
+          ? file.name
+          : urlExt
+            ? `${file.name}.${urlExt.toLowerCase()}`
+            : file.name;
+
+        archive.append(nodeStream, { name: fileName });
+      } catch {
+        // bỏ qua file lỗi, tiếp tục các file còn lại
+        continue;
+      }
+    }
+
+    await archive.finalize();
   }
 }
