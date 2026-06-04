@@ -7,25 +7,19 @@ import { MIME_TO_FILE_TYPE } from "../types/resource.types";
 import { Readable } from "stream";
 import type { Response } from "express";
 
-const archiverModule = require("archiver");
-console.log("archiver keys:", JSON.stringify(Object.keys(archiverModule)));
-console.log("archiver typeof:", typeof archiverModule);
-console.log("archiver.default typeof:", typeof archiverModule.default);
-const archiver = (archiverModule.default ?? archiverModule) as any;
+const { ZipArchive } = require("archiver");
 
 export class FileService {
   /** Detect fileType ưu tiên extension trước, fallback sang MIME */
   private static detectFileType(file: Express.Multer.File): ResourceFileType {
     const ext = file.originalname.split(".").pop()?.toLowerCase() ?? "";
 
-    // Extension-based (ưu tiên cao hơn MIME vì MIME có thể bị detect sai)
     if (ext === "cube") return "LUT";
     if (["gif", "jpeg", "jpg", "png"].includes(ext)) return "IMAGE";
     if (["ttf", "otf", "woff", "woff2"].includes(ext)) return "FONT";
     if (["mp3", "wav", "ogg", "flac", "aac"].includes(ext)) return "MP3";
     if (["mp4", "mov", "avi", "webm", "mkv"].includes(ext)) return "MP4";
 
-    // Fallback sang MIME
     const fromMime = MIME_TO_FILE_TYPE[file.mimetype];
     if (fromMime) return fromMime;
 
@@ -155,7 +149,7 @@ export class FileService {
       `attachment; filename="${encodeURIComponent(zipName)}"`,
     );
 
-    const archive = archiver("zip", { zlib: { level: 1 } });
+    const archive = new ZipArchive({ zlib: { level: 1 } });
     archive.pipe(res);
 
     for (const file of files) {
