@@ -8,11 +8,9 @@ import { Readable } from "stream";
 import type { Response } from "express";
 
 const archiverModule = require("archiver");
-console.log(
-  "archiver type:",
-  typeof archiverModule,
-  Object.keys(archiverModule),
-);
+console.log("archiver keys:", JSON.stringify(Object.keys(archiverModule)));
+console.log("archiver typeof:", typeof archiverModule);
+console.log("archiver.default typeof:", typeof archiverModule.default);
 const archiver = (archiverModule.default ?? archiverModule) as any;
 
 export class FileService {
