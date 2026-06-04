@@ -7,8 +7,13 @@ import { MIME_TO_FILE_TYPE } from "../types/resource.types";
 import { Readable } from "stream";
 import type { Response } from "express";
 
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const archiver = require("archiver") as any;
+const archiverModule = require("archiver");
+console.log(
+  "archiver type:",
+  typeof archiverModule,
+  Object.keys(archiverModule),
+);
+const archiver = (archiverModule.default ?? archiverModule) as any;
 
 export class FileService {
   /** Detect fileType ưu tiên extension trước, fallback sang MIME */
