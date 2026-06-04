@@ -4,9 +4,11 @@ import { ResourceFileType } from "@prisma/client";
 import { v4 as uuidv4 } from "uuid";
 import { bunnyStorageService } from "./bunny-storage.service";
 import { MIME_TO_FILE_TYPE } from "../types/resource.types";
-import archiver from "archiver";
 import { Readable } from "stream";
 import type { Response } from "express";
+
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const archiver = require("archiver") as any;
 
 export class FileService {
   /** Detect fileType ưu tiên extension trước, fallback sang MIME */
