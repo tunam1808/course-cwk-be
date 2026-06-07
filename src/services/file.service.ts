@@ -4,7 +4,6 @@ import { ResourceFileType } from "@prisma/client";
 import { v4 as uuidv4 } from "uuid";
 import { bunnyStorageService } from "./bunny-storage.service";
 import { MIME_TO_FILE_TYPE } from "../types/resource.types";
-import { Readable } from "stream";
 import type { Response } from "express";
 
 const { ZipArchive } = require("archiver");
@@ -24,6 +23,35 @@ export class FileService {
     if (fromMime) return fromMime;
 
     throw new Error(`Định dạng không hỗ trợ: ${file.mimetype} (.${ext})`);
+  }
+
+  /** Fetch file về buffer, retry tối đa maxRetries lần */
+  private static async fetchBuffer(
+    url: string,
+    maxRetries = 3,
+  ): Promise<Buffer | null> {
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        const response = await fetch(url, {
+          signal: AbortSignal.timeout(60_000),
+        });
+        if (!response.ok) {
+          console.warn(
+            `Fetch failed (attempt ${attempt}): HTTP ${response.status} — ${url}`,
+          );
+          continue;
+        }
+        const arrayBuffer = await response.arrayBuffer();
+        return Buffer.from(arrayBuffer);
+      } catch (err: any) {
+        console.warn(
+          `Fetch error (attempt ${attempt}): ${err?.message} — ${url}`,
+        );
+        if (attempt < maxRetries)
+          await new Promise((r) => setTimeout(r, 1000 * attempt));
+      }
+    }
+    return null;
   }
 
   /** Upload file cấp 3 vào subfolder */
@@ -164,35 +192,22 @@ export class FileService {
     archive.pipe(res);
 
     for (const file of files) {
-      try {
-        const response = await fetch(file.fileUrl);
-        if (!response.ok || !response.body) {
-          console.warn("Skip file (bad response):", file.name);
-          continue;
-        }
+      const urlExt = file.fileUrl.split("?")[0].match(/\.([a-zA-Z0-9]+)$/)?.[1];
+      const nameHasExt = /\.[a-zA-Z0-9]{2,5}$/.test(file.name);
+      const fileName = nameHasExt
+        ? file.name
+        : urlExt
+          ? `${file.name}.${urlExt.toLowerCase()}`
+          : file.name;
 
-        const nodeStream = Readable.fromWeb(response.body as any);
-
-        // Bắt lỗi stream để tránh crash toàn app
-        nodeStream.on("error", (err) => {
-          console.error("Stream error for file:", file.name, err.message);
-        });
-
-        const urlExt = file.fileUrl
-          .split("?")[0]
-          .match(/\.([a-zA-Z0-9]+)$/)?.[1];
-        const nameHasExt = /\.[a-zA-Z0-9]{2,5}$/.test(file.name);
-        const fileName = nameHasExt
-          ? file.name
-          : urlExt
-            ? `${file.name}.${urlExt.toLowerCase()}`
-            : file.name;
-
-        archive.append(nodeStream, { name: fileName });
-      } catch (err) {
-        console.error("File append error:", file.name, err);
+      // Download toàn bộ về buffer trước, tránh stream bị đứt giữa chừng
+      const buffer = await FileService.fetchBuffer(file.fileUrl);
+      if (!buffer) {
+        console.error("Skip file after retries:", file.name);
         continue;
       }
+
+      archive.append(buffer, { name: fileName });
     }
 
     await archive.finalize();
