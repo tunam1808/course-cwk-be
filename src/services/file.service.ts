@@ -150,6 +150,15 @@ export class FileService {
     );
 
     const archive = new ZipArchive({ zlib: { level: 1 } });
+
+    archive.on("error", (err: Error) => {
+      console.error("Archive error:", err);
+    });
+
+    archive.on("warning", (err: Error) => {
+      console.warn("Archive warning:", err);
+    });
+
     archive.pipe(res);
 
     for (const file of files) {
@@ -170,8 +179,8 @@ export class FileService {
             : file.name;
 
         archive.append(nodeStream, { name: fileName });
-      } catch {
-        // bỏ qua file lỗi, tiếp tục các file còn lại
+      } catch (err) {
+        console.error("File append error:", err);
         continue;
       }
     }
