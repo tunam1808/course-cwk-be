@@ -166,9 +166,17 @@ export class FileService {
     for (const file of files) {
       try {
         const response = await fetch(file.fileUrl);
-        if (!response.ok || !response.body) continue;
+        if (!response.ok || !response.body) {
+          console.warn("Skip file (bad response):", file.name);
+          continue;
+        }
 
         const nodeStream = Readable.fromWeb(response.body as any);
+
+        // Bắt lỗi stream để tránh crash toàn app
+        nodeStream.on("error", (err) => {
+          console.error("Stream error for file:", file.name, err.message);
+        });
 
         const urlExt = file.fileUrl
           .split("?")[0]
@@ -182,7 +190,7 @@ export class FileService {
 
         archive.append(nodeStream, { name: fileName });
       } catch (err) {
-        console.error("File append error:", err);
+        console.error("File append error:", file.name, err);
         continue;
       }
     }
