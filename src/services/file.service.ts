@@ -148,6 +148,8 @@ export class FileService {
       "Content-Disposition",
       `attachment; filename="${encodeURIComponent(zipName)}"`,
     );
+    res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
+    res.setHeader("Pragma", "no-cache");
 
     const archive = new ZipArchive({ zlib: { level: 1 } });
 
