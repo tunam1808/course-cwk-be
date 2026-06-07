@@ -5,8 +5,13 @@ import { v4 as uuidv4 } from "uuid";
 import { bunnyStorageService } from "./bunny-storage.service";
 import { MIME_TO_FILE_TYPE } from "../types/resource.types";
 import type { Response } from "express";
+import axios from "axios";
 
 const { ZipArchive } = require("archiver");
+
+const ZONE = process.env.BUNNY_STORAGE_ZONE_NAME!;
+const API_KEY = process.env.BUNNY_STORAGE_API_KEY!;
+const HOSTNAME = process.env.BUNNY_STORAGE_HOSTNAME!;
 
 export class FileService {
   /** Detect fileType ưu tiên extension trước, fallback sang MIME */
@@ -25,27 +30,28 @@ export class FileService {
     throw new Error(`Định dạng không hỗ trợ: ${file.mimetype} (.${ext})`);
   }
 
-  /** Fetch file về buffer, retry tối đa maxRetries lần */
+  /**
+   * Download file từ Bunny Storage API (không qua CDN)
+   * Dùng fileKey thay vì CDN URL để tránh bị block
+   */
   private static async fetchBuffer(
-    url: string,
+    fileKey: string,
     maxRetries = 3,
   ): Promise<Buffer | null> {
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       try {
-        const response = await fetch(url, {
-          signal: AbortSignal.timeout(60_000),
-        });
-        if (!response.ok) {
-          console.warn(
-            `Fetch failed (attempt ${attempt}): HTTP ${response.status} — ${url}`,
-          );
-          continue;
-        }
-        const arrayBuffer = await response.arrayBuffer();
-        return Buffer.from(arrayBuffer);
+        const response = await axios.get(
+          `https://${HOSTNAME}/${ZONE}/${fileKey}`,
+          {
+            headers: { AccessKey: API_KEY },
+            responseType: "arraybuffer",
+            timeout: 120_000,
+          },
+        );
+        return Buffer.from(response.data);
       } catch (err: any) {
         console.warn(
-          `Fetch error (attempt ${attempt}): ${err?.message} — ${url}`,
+          `Fetch error (attempt ${attempt}): ${err?.message} — ${fileKey}`,
         );
         if (attempt < maxRetries)
           await new Promise((r) => setTimeout(r, 1000 * attempt));
@@ -192,7 +198,7 @@ export class FileService {
     archive.pipe(res);
 
     for (const file of files) {
-      const urlExt = file.fileUrl.split("?")[0].match(/\.([a-zA-Z0-9]+)$/)?.[1];
+      const urlExt = file.fileKey.match(/\.([a-zA-Z0-9]+)$/)?.[1];
       const nameHasExt = /\.[a-zA-Z0-9]{2,5}$/.test(file.name);
       const fileName = nameHasExt
         ? file.name
@@ -200,8 +206,8 @@ export class FileService {
           ? `${file.name}.${urlExt.toLowerCase()}`
           : file.name;
 
-      // Download toàn bộ về buffer trước, tránh stream bị đứt giữa chừng
-      const buffer = await FileService.fetchBuffer(file.fileUrl);
+      // Dùng Storage API (fileKey) thay vì CDN URL để tránh bị block
+      const buffer = await FileService.fetchBuffer(file.fileKey);
       if (!buffer) {
         console.error("Skip file after retries:", file.name);
         continue;
