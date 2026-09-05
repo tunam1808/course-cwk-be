@@ -18,6 +18,11 @@ model User {
   updatedAt   DateTime     @updatedAt
   progress    Progress[]
   userCourses UserCourse[]
+  scheduleAccess ScheduleAccess?
+  scheduleFeedbacks ScheduleFeedback[]
+  scheduleAttendances ScheduleAttendance[]
+  scheduleMemberships ScheduleMember[]
+  pushSubscriptions PushSubscription[]
   @@map("user")
 }
 
@@ -163,4 +168,145 @@ enum ResourceFileType {
   IMAGE // image: gif, jpeg, jpg, png
   LUT   // lut màu: cube
   OTHER
+}
+
+
+// ── THỜI KHÓA BIỂU ──────────────────────────────────────────────────
+model ScheduleItem {
+  id        Int              @id @default(autoincrement())
+  date      DateTime         @db.Date // ngày cụ thể của buổi — mỗi tuần có thể khác nhau
+  session   ScheduleSession  // suy ra từ startTime lúc lưu, cache để query nhanh
+  type      ScheduleType
+  title     String
+  startTime String           @db.VarChar(5) // "HH:mm"
+  endTime   String           @db.VarChar(5) // "HH:mm"
+  allTeam   Boolean          @default(false)
+  // true khi đã gửi push nhắc "còn 1 tiếng nữa" cho buổi này — tránh gửi
+  // trùng lặp mỗi lần cron quét lại. Reset về false khi ngày/giờ buổi bị sửa.
+  notified1hBefore Boolean   @default(false)
+  // true khi đã gửi nhắc "còn buổi chưa đánh giá" cho buổi này (gửi 1 lần
+  // duy nhất, 30 phút sau khi buổi kết thúc, cho những ai lúc đó chưa nộp).
+  notifiedFeedbackReminder Boolean @default(false)
+  members   ScheduleMember[]
+  feedbacks ScheduleFeedback[] 
+  attendances ScheduleAttendance[]  
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+
+  @@index([date, session])
+  @@map("schedule_item")
+}
+
+// Thành viên tham gia 1 buổi — liên kết tới tài khoản User thật (không còn
+// là tên tự nhập), để có thể xác định chính xác gửi push notification cho
+// đúng ai khi buổi không phải "cả team".
+model ScheduleMember {
+  id             Int          @id @default(autoincrement())
+  scheduleItemId Int
+  scheduleItem   ScheduleItem @relation(fields: [scheduleItemId], references: [id], onDelete: Cascade)
+  userId         Int
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt      DateTime     @default(now())
+
+  @@unique([scheduleItemId, userId])
+  @@index([scheduleItemId])
+  @@index([userId])
+  @@map("schedule_member")
+}
+
+
+enum ScheduleSession {
+  SANG
+  CHIEU
+  TOI
+}
+
+enum ScheduleType {
+  HOC
+  CHOI
+}
+
+
+// ── QUYỀN XEM THỜI KHÓA BIỂU ─────────────────────────────────────────
+// Admin chỉ được chọn/nhập email của tài khoản ĐÃ TỒN TẠI trong bảng User
+// (kiểm tra ở tầng controller trước khi tạo bản ghi này). type chỉ là
+// nhãn để admin lọc/phân loại, không tự động ảnh hưởng quyền xem.
+model ScheduleAccess {
+  id        Int                @id @default(autoincrement())
+  userId    Int                @unique
+  user      User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      ScheduleAccessType @default(NORMAL)
+  createdAt DateTime           @default(now())
+  updatedAt DateTime           @updatedAt
+
+  @@map("schedule_access")
+}
+
+enum ScheduleAccessType {
+  TEAM_MEMBER
+  NORMAL
+}
+
+
+// ── ĐÁNH GIÁ BUỔI HỌC / BUỔI ĐI CHƠI ─────────────────────────────────
+// Mỗi user chỉ đánh giá 1 lần cho 1 buổi (unique scheduleItemId+userId).
+// Form chỉ hiện khi buổi đã kết thúc >=30 phút, kiểm tra lại ở server khi nộp.
+model ScheduleFeedback {
+  id               Int          @id @default(autoincrement())
+  scheduleItemId   Int
+  scheduleItem     ScheduleItem @relation(fields: [scheduleItemId], references: [id], onDelete: Cascade)
+  userId           Int
+  user             User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  moodScore        Int // 1-10: hôm nay vui không
+  moodReason       String?      @db.Text // lý do nếu không vui
+  understandScore  Int? // 1-5: hiểu bài không — chỉ áp dụng buổi học (type = HOC)
+  understandNote   String?      @db.Text // chỗ chưa hiểu
+  energyScore      Int // 1-10: năng lượng hôm nay
+  difficulty       String?      @db.Text // khó khăn / cần giúp đỡ
+  suggestion       String?      @db.Text // góp ý giảng dạy / gắn kết
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+
+  @@unique([scheduleItemId, userId])
+  @@index([scheduleItemId])
+  @@map("schedule_feedback")
+}
+
+
+// ── ĐIỂM DANH BUỔI HỌC ────────────────────────────────────────────────
+// Danh sách người tham gia lấy từ schedule_access (tài khoản được cấp quyền
+// xem lịch) — admin chọn ai tham gia buổi này (hoặc chọn hết = cả team) rồi
+// tick có mặt/vắng cho từng người. present = null nghĩa là đã thêm vào danh
+// sách tham gia nhưng chưa tick trạng thái.
+model ScheduleAttendance {
+  id             Int          @id @default(autoincrement())
+  scheduleItemId Int
+  scheduleItem   ScheduleItem @relation(fields: [scheduleItemId], references: [id], onDelete: Cascade)
+  userId         Int
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  present        Boolean?     // null = chưa tick, true = có mặt, false = vắng
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@unique([scheduleItemId, userId])
+  @@index([scheduleItemId])
+  @@map("schedule_attendance")
+}
+
+// ── ĐĂNG KÝ NHẬN PUSH NOTIFICATION (PWA) ─────────────────────────────
+// Mỗi thiết bị/trình duyệt cài PWA sẽ tạo 1 bản ghi riêng (1 user có thể có
+// nhiều thiết bị). endpoint là duy nhất do trình duyệt cấp cho từng lần
+// subscribe, dùng để chống trùng khi subscribe lại (upsert theo endpoint).
+model PushSubscription {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  endpoint  String   @unique @db.VarChar(500)
+  p256dh    String   @db.VarChar(255)
+  auth      String   @db.VarChar(255)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+  @@map("push_subscription")
 }

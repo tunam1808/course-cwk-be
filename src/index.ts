@@ -10,6 +10,9 @@ import videoRoutes from "./routes/video.routes";
 import introRoute from "./routes/intro.router";
 import countdownRouter from "./routes/countdown.router";
 import resourceRoutes from "./routes/resource.routes";
+import scheduleRoutes from "./routes/schedule.router";
+import pushRoutes from "./routes/push.routes";
+import { startScheduleNotificationCron } from "./services/scheduleNotification.service";
 
 dotenv.config();
 
@@ -38,6 +41,8 @@ app.use("/api/videos", videoRoutes);
 app.use("/api/intro", introRoute);
 app.use("/api/countdown", countdownRouter);
 app.use("/api", resourceRoutes);
+app.use("/api/schedule", scheduleRoutes);
+app.use("/api/push", pushRoutes);
 
 app.get("/", (req, res) => {
   res.send("Backend API running...");
@@ -48,6 +53,8 @@ const PORT = process.env.PORT || 4000;
 // 👈 Tăng timeout lên 30 phút
 const server = app.listen(PORT, () => {
   console.log(`Server đang chạy tại http://localhost:${PORT}`);
+  // Bắt đầu quét lịch mỗi phút để gửi push nhắc "còn 1 tiếng nữa"
+  startScheduleNotificationCron();
 });
 
 server.timeout = 30 * 60 * 1000;
