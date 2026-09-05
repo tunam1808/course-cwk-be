@@ -104,8 +104,7 @@ async function checkAndNotifyUpcomingSessions(): Promise<void> {
       await sendPushToUsers(userIds, {
         title: `Sắp đến giờ: ${item.title}`,
         body: `${typeLabel} · ${sessionLabelOf(item.startTime)} ${item.startTime}–${item.endTime} sẽ bắt đầu sau khoảng 1 tiếng nữa.`,
-        // Đổi lại đường dẫn này cho khớp route thực tế của trang xem lịch học viên
-        url: "/manage-page/my-schedule",
+        url: "/schedule",
       });
     }
 
@@ -181,7 +180,7 @@ async function checkAndNotifyFeedbackReminders(): Promise<void> {
         await sendPushToUsers(pendingUserIds, {
           title: "Bạn có buổi chưa đánh giá",
           body: `"${item.title}" (${item.startTime}–${item.endTime}) đã kết thúc — hãy vào đánh giá nhé!`,
-          url: "/manage-page/my-schedule",
+          url: "/schedule",
         });
       }
     }
