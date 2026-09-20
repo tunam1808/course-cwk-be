@@ -23,6 +23,10 @@ model User {
   scheduleAttendances ScheduleAttendance[]
   scheduleMemberships ScheduleMember[]
   pushSubscriptions PushSubscription[]
+  // Điểm đánh giá của chính user này (khi là học viên có quyền xem lịch)
+  scoreLogs        StudentScoreLog[] @relation("StudentScoreLogs")
+  // Các lượt chấm điểm mà user này (khi là admin) đã thực hiện cho người khác
+  scoreLogsCreated StudentScoreLog[] @relation("ScoreLogCreatedBy")
   @@map("user")
 }
 
@@ -93,7 +97,6 @@ model LuckySetting {
 
   @@map("lucky_setting")
 }
-
 enum CourseCategory {
   CAPCUT_AI
   BAT_DONG_SAN
@@ -189,7 +192,8 @@ model ScheduleItem {
   notifiedFeedbackReminder Boolean @default(false)
   members   ScheduleMember[]
   feedbacks ScheduleFeedback[] 
-  attendances ScheduleAttendance[]  
+  attendances ScheduleAttendance[]
+  scoreLogs StudentScoreLog[]
   createdAt DateTime         @default(now())
   updatedAt DateTime         @updatedAt
 
@@ -231,11 +235,20 @@ enum ScheduleType {
 // Admin chỉ được chọn/nhập email của tài khoản ĐÃ TỒN TẠI trong bảng User
 // (kiểm tra ở tầng controller trước khi tạo bản ghi này). type chỉ là
 // nhãn để admin lọc/phân loại, không tự động ảnh hưởng quyền xem.
+// Bảng này cũng đồng thời là danh sách "đủ điều kiện có điểm đánh giá" —
+// chỉ ai có mặt ở đây mới được chấm điểm.
+
 model ScheduleAccess {
   id        Int                @id @default(autoincrement())
   userId    Int                @unique
   user      User               @relation(fields: [userId], references: [id], onDelete: Cascade)
   type      ScheduleAccessType @default(NORMAL)
+  // Mức cảnh báo điểm đã gửi push gần nhất — dùng để chỉ gửi push khi mức độ
+  // XẤU ĐI (VD từ NONE -> MILD, hoặc MILD -> SEVERE), tránh gửi lặp lại mỗi
+  // lần bị trừ thêm điểm trong khi vẫn đứng yên ở cùng 1 mức. Khi điểm cải
+  // thiện trở lại, mức này vẫn được cập nhật giảm xuống (âm thầm, không gửi
+  // push "chúc mừng"), để nếu sau đó lại tụt xuống thì vẫn được cảnh báo tiếp.
+  scoreWarningLevel ScoreWarningLevel @default(NONE)
   createdAt DateTime           @default(now())
   updatedAt DateTime           @updatedAt
 
@@ -245,6 +258,12 @@ model ScheduleAccess {
 enum ScheduleAccessType {
   TEAM_MEMBER
   NORMAL
+}
+
+enum ScoreWarningLevel {
+  NONE
+  MILD   // điểm < 60: "Điểm của bạn đang thấp, cần cố gắng hơn"
+  SEVERE // điểm < 40: "Bạn sắp bị bỏ lại phía sau rồi đó, cải thiện hơn nào"
 }
 
 
@@ -309,4 +328,46 @@ model PushSubscription {
 
   @@index([userId])
   @@map("push_subscription")
+}
+
+// ── HỆ THỐNG CHẤM ĐIỂM HỌC VIÊN ───────────────────────────────────────
+// Danh sách lý do do admin tự tạo sẵn (VD: "Đi trễ", "Giúp đỡ bạn học").
+// defaultPoints là điểm mặc định gợi ý khi admin áp dụng lý do này cho 1
+// học viên (tự động điền sẵn vào form, admin vẫn có thể sửa lại trước khi
+// xác nhận). Để trống (null) nếu muốn admin luôn phải tự nhập điểm mỗi lần.
+model ScoreReason {
+  id            Int               @id @default(autoincrement())
+  label         String
+  defaultPoints Int?
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+  logs          StudentScoreLog[]
+
+  @@map("score_reason")
+}
+
+// Mỗi lần admin cộng/trừ điểm cho 1 học viên là 1 bản ghi ở đây — giữ lại
+// lịch sử đầy đủ để cả admin và học viên xem lại vì sao điểm thay đổi.
+// Điểm hiện tại của 1 học viên = 100 + tổng points của tất cả log của họ.
+model StudentScoreLog {
+  id          Int         @id @default(autoincrement())
+  userId      Int
+  user        User        @relation("StudentScoreLogs", fields: [userId], references: [id], onDelete: Cascade)
+  reasonId    Int
+  reason      ScoreReason @relation(fields: [reasonId], references: [id])
+  points      Int // dương = cộng điểm, âm = trừ điểm (điền sẵn từ defaultPoints, admin có thể sửa)
+  note        String?     @db.Text
+  createdById Int
+  createdBy   User        @relation("ScoreLogCreatedBy", fields: [createdById], references: [id])
+  createdAt   DateTime    @default(now())
+  // Liên kết tới buổi học nếu điểm này được TỰ ĐỘNG cộng do điểm danh "Có
+  // mặt" (không phải admin chấm tay ở trang chấm điểm) — dùng để tránh cộng
+  // trùng khi admin lưu lại điểm danh nhiều lần, và để thu hồi điểm nếu sau
+  // đó admin sửa lại thành vắng. NULL với các lượt chấm điểm thủ công.
+  scheduleItemId Int?
+  scheduleItem   ScheduleItem? @relation(fields: [scheduleItemId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([scheduleItemId])
+  @@map("student_score_log")
 }

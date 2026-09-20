@@ -7,6 +7,7 @@ import {
   ScheduleType,
   ScheduleAccessType,
 } from "@prisma/client";
+import { getSummaryForUser, syncWarningLevel } from "./score.controller";
 
 // req.user được gắn sẵn type { id: number; role: string } từ auth.middleware.ts
 // (declare global mở rộng Express.Request) — không cần ép kiểu as any nữa.
@@ -34,8 +35,6 @@ function isValidDateString(value: string): boolean {
   );
 }
 
-// Dùng Date.UTC để cố định là 00:00 UTC của đúng ngày dương lịch đó,
-// KHÔNG phụ thuộc múi giờ của server — tránh bug lệch 1 ngày khi lưu.
 function parseDateOnly(value: string): Date {
   const [y, m, d] = value.split("-").map(Number);
   return new Date(Date.UTC(y, m - 1, d));
@@ -49,9 +48,6 @@ function isValidAccessType(type: string): type is ScheduleAccessType {
   return Object.values(ScheduleAccessType).includes(type as ScheduleAccessType);
 }
 
-// Giờ hiện tại theo múi giờ Việt Nam (UTC+7 cố định, không có DST) — tính thủ
-// công thay vì dựa vào múi giờ của server, để không lặp lại bug lệch ngày/giờ
-// nếu server chạy ở múi giờ khác (VD server đặt ở UTC).
 function nowInVietnam(): { dateStr: string; timeStr: string } {
   const vn = new Date(Date.now() + 7 * 60 * 60 * 1000);
   const y = vn.getUTCFullYear();
@@ -62,7 +58,6 @@ function nowInVietnam(): { dateStr: string; timeStr: string } {
   return { dateStr: `${y}-${m}-${d}`, timeStr: `${hh}:${mm}` };
 }
 
-// Cộng thêm phút vào 1 mốc ngày+giờ, tự tràn sang ngày kế tiếp nếu cần
 function addMinutesToDateTime(
   dateStr: string,
   timeStr: string,
@@ -79,8 +74,6 @@ function addMinutesToDateTime(
   };
 }
 
-// So sánh 2 mốc ngày+giờ dạng chuỗi — vì đều fixed-width (YYYY-MM-DD, HH:mm)
-// nên ghép lại rồi so sánh chuỗi là đủ chính xác, không cần dựng Date object.
 function isAtOrAfter(
   aDate: string,
   aTime: string,
@@ -98,8 +91,25 @@ const SCHEDULE_MEMBER_USER_SELECT = {
   fullName: true,
 } as const;
 
-// Dùng chung cho các route cần kiểm tra "có được xem lịch không" (admin hoặc
-// đã được cấp quyền trong bảng schedule_access).
+// ─── Điểm cộng tự động khi điểm danh "Có mặt" ────────────────────────────
+const ATTENDANCE_BONUS_LABEL = "Điểm danh có mặt";
+const ATTENDANCE_BONUS_POINTS = 5;
+
+// Lấy (hoặc tự tạo nếu chưa có) lý do hệ thống dùng riêng cho điểm cộng tự
+// động khi điểm danh "Có mặt" — không lẫn với các lý do admin tự tạo thủ công.
+async function getAttendanceBonusReason() {
+  const existing = await prisma.scoreReason.findFirst({
+    where: { label: ATTENDANCE_BONUS_LABEL },
+  });
+  if (existing) return existing;
+  return prisma.scoreReason.create({
+    data: {
+      label: ATTENDANCE_BONUS_LABEL,
+      defaultPoints: ATTENDANCE_BONUS_POINTS,
+    },
+  });
+}
+
 async function userHasScheduleAccess(
   userId?: number,
   role?: string,
@@ -110,8 +120,6 @@ async function userHasScheduleAccess(
   return !!access;
 }
 
-// Kiểm tra 1 khung giờ [startTime, endTime) có trùng với buổi nào khác
-// trong cùng ngày không (được phép trùng ngày, trùng buổi — chỉ không được trùng giờ).
 async function hasTimeConflict(
   date: Date,
   startTime: string,
@@ -129,9 +137,6 @@ async function hasTimeConflict(
   return sameDay.some((it) => startTime < it.endTime && it.startTime < endTime);
 }
 
-// Lọc + validate danh sách userId thành viên gửi lên từ FE: phải là số
-// nguyên hợp lệ và phải nằm trong bảng schedule_access (được admin cấp quyền
-// xem lịch) — không cho gán buổi cho tài khoản không có quyền xem.
 async function resolveMemberUserIds(
   raw: unknown,
 ): Promise<{ ok: true; userIds: number[] } | { ok: false; message: string }> {
@@ -160,8 +165,6 @@ async function resolveMemberUserIds(
   return { ok: true, userIds: [...new Set(userIds)] };
 }
 
-// ─── Kiểm tra quyền xem lịch của chính user đang đăng nhập ──────────────────
-// GET /schedule/my-access — dùng cho Navbar để quyết định có hiện link "Lịch của tôi" không
 export const checkMyScheduleAccess = async (req: Request, res: Response) => {
   if (!req.user?.id) {
     return res.json({ hasAccess: false });
@@ -177,7 +180,6 @@ export const checkMyScheduleAccess = async (req: Request, res: Response) => {
   res.json({ hasAccess: !!access });
 };
 
-// ─── Lấy thời khóa biểu theo khoảng ngày (?from=YYYY-MM-DD&to=YYYY-MM-DD) ───
 export const getSchedule = async (req: Request, res: Response) => {
   if (req.user?.role !== "ADMIN") {
     const access = req.user?.id
@@ -224,7 +226,6 @@ export const getSchedule = async (req: Request, res: Response) => {
   res.json(items);
 };
 
-// ─── Thêm buổi học / buổi đi chơi ───────────────────────────────────────────
 export const createScheduleItem = async (req: Request, res: Response) => {
   const { date, type, title, startTime, endTime, allTeam, members } = req.body;
 
@@ -293,8 +294,6 @@ export const createScheduleItem = async (req: Request, res: Response) => {
       endTime,
       allTeam: isAllTeam,
       session: sessionFromTime(startTime),
-      notified1hBefore: false,
-      notifiedFeedbackReminder: false,
       members: {
         create: memberResolution.userIds.map((userId) => ({ userId })),
       },
@@ -307,7 +306,6 @@ export const createScheduleItem = async (req: Request, res: Response) => {
   res.json({ success: true, item });
 };
 
-// ─── Sửa buổi học / buổi đi chơi ────────────────────────────────────────────
 export const updateScheduleItem = async (req: Request, res: Response) => {
   const id = Number(req.params.id);
   const { date, type, title, startTime, endTime, allTeam, members } = req.body;
@@ -377,9 +375,6 @@ export const updateScheduleItem = async (req: Request, res: Response) => {
       .json({ success: false, message: memberResolution.message });
   }
 
-  // Xóa danh sách thành viên cũ rồi tạo lại — đơn giản, an toàn cho danh sách nhỏ.
-  // notified1hBefore được reset về false vì ngày/giờ/thành viên có thể đã đổi —
-  // cho phép cron gửi lại thông báo đúng cho lịch mới.
   const item = await prisma.$transaction(async (tx) => {
     await tx.scheduleMember.deleteMany({ where: { scheduleItemId: id } });
     return tx.scheduleItem.update({
@@ -409,7 +404,6 @@ export const updateScheduleItem = async (req: Request, res: Response) => {
   res.json({ success: true, item });
 };
 
-// ─── Xóa buổi học / buổi đi chơi ────────────────────────────────────────────
 export const deleteScheduleItem = async (req: Request, res: Response) => {
   const id = Number(req.params.id);
   if (!id)
@@ -426,9 +420,6 @@ export const deleteScheduleItem = async (req: Request, res: Response) => {
   res.json({ success: true });
 };
 
-// ─── ĐIỂM DANH BUỔI HỌC ──────────────────────────────────────────────────────
-
-// Lấy danh sách điểm danh hiện tại của 1 buổi. GET /schedule/:id/attendance (admin)
 export const getScheduleAttendance = async (req: Request, res: Response) => {
   const scheduleItemId = Number(req.params.id);
   if (!scheduleItemId) {
@@ -453,16 +444,10 @@ export const getScheduleAttendance = async (req: Request, res: Response) => {
   res.json(attendance);
 };
 
-// Lưu danh sách điểm danh (thay thế toàn bộ danh sách cũ) — chỉ chấp nhận
-// userId nằm trong bảng schedule_access. PUT /schedule/:id/attendance (admin)
-//
-// Nếu buổi học đã QUA NGÀY (tức đã ở trạng thái "điểm danh hoàn tất" trên FE),
-// bắt buộc phải xác thực lại bằng đúng mật khẩu của chính tài khoản admin
-// đang đăng nhập trước khi cho phép ghi đè điểm danh — tránh sửa nhầm/sửa
-// bừa dữ liệu điểm danh lịch sử.
+// Ai được tick "Có mặt" sẽ TỰ ĐỘNG được cộng 5 điểm đánh giá (lý do hệ thống
+// "Điểm danh có mặt"). Nếu admin sửa lại điểm danh và bỏ tick "Có mặt" của
+// ai đó (mà trước đây từng được tick), điểm cộng tương ứng sẽ bị thu hồi.
 export const saveScheduleAttendance = async (req: Request, res: Response) => {
-  // Chỉ ADMIN mới được điểm danh — bắt buộc vì bên dưới sẽ tra cứu và so
-  // sánh mật khẩu của chính req.user.id, giả định người gọi là admin.
   if (req.user?.role !== "ADMIN") {
     return res
       .status(403)
@@ -483,7 +468,6 @@ export const saveScheduleAttendance = async (req: Request, res: Response) => {
       .json({ success: false, message: "Không tìm thấy buổi học" });
   }
 
-  // ── Buổi đã qua ngày => bắt buộc xác thực lại bằng mật khẩu admin ──────
   const nowVN = nowInVietnam();
   const itemDateStr = item.date.toISOString().slice(0, 10);
   const isPastDate = itemDateStr < nowVN.dateStr;
@@ -564,6 +548,46 @@ export const saveScheduleAttendance = async (req: Request, res: Response) => {
     }
   });
 
+  // ── Tự động cộng/thu hồi điểm dựa trên điểm danh "Có mặt" ──────────────
+  const bonusReason = await getAttendanceBonusReason();
+  const existingBonusLogs = await prisma.studentScoreLog.findMany({
+    where: { scheduleItemId, reasonId: bonusReason.id },
+    select: { id: true, userId: true },
+  });
+  const existingBonusUserIds = new Set(existingBonusLogs.map((l) => l.userId));
+  const presentUserIds = new Set(
+    participants.filter((p) => p.present === true).map((p) => Number(p.userId)),
+  );
+
+  const affectedUserIds = new Set<number>();
+
+  for (const userId of presentUserIds) {
+    if (!existingBonusUserIds.has(userId)) {
+      await prisma.studentScoreLog.create({
+        data: {
+          userId,
+          reasonId: bonusReason.id,
+          points: bonusReason.defaultPoints ?? ATTENDANCE_BONUS_POINTS,
+          createdById: req.user!.id,
+          scheduleItemId,
+        },
+      });
+      affectedUserIds.add(userId);
+    }
+  }
+
+  for (const log of existingBonusLogs) {
+    if (!presentUserIds.has(log.userId)) {
+      await prisma.studentScoreLog.delete({ where: { id: log.id } });
+      affectedUserIds.add(log.userId);
+    }
+  }
+
+  for (const userId of affectedUserIds) {
+    const summary = await getSummaryForUser(userId);
+    await syncWarningLevel(userId, summary.warningLevel);
+  }
+
   const attendance = await prisma.scheduleAttendance.findMany({
     where: { scheduleItemId },
     include: { user: { select: { id: true, email: true, fullName: true } } },
@@ -573,10 +597,6 @@ export const saveScheduleAttendance = async (req: Request, res: Response) => {
   res.json({ success: true, attendance });
 };
 
-// ─── ĐÁNH GIÁ BUỔI HỌC / BUỔI ĐI CHƠI ────────────────────────────────────────
-
-// Lấy các buổi HÔM NAY đã kết thúc >=30 phút mà user hiện tại chưa đánh giá.
-// GET /schedule/feedback/pending
 export const getPendingScheduleFeedback = async (
   req: Request,
   res: Response,
@@ -630,7 +650,6 @@ export const getPendingScheduleFeedback = async (
   res.json(pending);
 };
 
-// Nộp đánh giá cho 1 buổi cụ thể. POST /schedule/feedback
 export const submitScheduleFeedback = async (req: Request, res: Response) => {
   const hasAccess = await userHasScheduleAccess(req.user?.id, req.user?.role);
   if (!hasAccess) {
@@ -665,8 +684,6 @@ export const submitScheduleFeedback = async (req: Request, res: Response) => {
       .json({ success: false, message: "Không tìm thấy buổi học" });
   }
 
-  // Kiểm tra lại điều kiện "đã kết thúc >=30 phút" ở server — tránh trường hợp
-  // gọi thẳng API để bỏ qua điều kiện chỉ áp ở frontend.
   const nowVN = nowInVietnam();
   const itemDateStr = item.date.toISOString().slice(0, 10);
   const threshold = addMinutesToDateTime(
@@ -756,9 +773,6 @@ export const submitScheduleFeedback = async (req: Request, res: Response) => {
   }
 };
 
-// Danh sách các buổi user hiện tại ĐÃ đánh giá (không giới hạn hôm nay) — dùng
-// để FE hiện trạng thái nút "Đánh giá" / "Đã đánh giá" dưới mỗi buổi trong lịch.
-// GET /schedule/feedback/mine
 export const getMyScheduleFeedbackIds = async (req: Request, res: Response) => {
   if (!req.user?.id) return res.json([]);
 
@@ -770,7 +784,6 @@ export const getMyScheduleFeedbackIds = async (req: Request, res: Response) => {
   res.json(list.map((f) => f.scheduleItemId));
 };
 
-// Danh sách đánh giá cho admin xem — GET /schedule/feedback?from=&to=&scheduleItemId=
 export const getScheduleFeedbackList = async (req: Request, res: Response) => {
   const { from, to, scheduleItemId } = req.query as {
     from?: string;
@@ -819,7 +832,6 @@ export const getScheduleFeedbackList = async (req: Request, res: Response) => {
   res.json(list);
 };
 
-// Xóa 1 đánh giá — DELETE /schedule/feedback/:id (admin)
 export const deleteScheduleFeedback = async (req: Request, res: Response) => {
   const id = Number(req.params.id);
   if (!id)
@@ -836,7 +848,6 @@ export const deleteScheduleFeedback = async (req: Request, res: Response) => {
   res.json({ success: true });
 };
 
-// Xóa TẤT CẢ đánh giá — DELETE /schedule/feedback/all (admin)
 export const deleteAllScheduleFeedback = async (
   req: Request,
   res: Response,
@@ -845,7 +856,6 @@ export const deleteAllScheduleFeedback = async (
   res.json({ success: true, count: result.count });
 };
 
-// ─── Quản lý whitelist email được xem lịch (admin) ──────────────────────────
 export const getScheduleAccessList = async (req: Request, res: Response) => {
   const list = await prisma.scheduleAccess.findMany({
     include: { user: { select: { id: true, email: true, fullName: true } } },
@@ -855,8 +865,6 @@ export const getScheduleAccessList = async (req: Request, res: Response) => {
   res.json(list);
 };
 
-// Tìm kiếm tài khoản theo email để admin chọn cấp quyền xem lịch
-// GET /schedule/access/search-users?q=abc
 export const searchUsersForAccess = async (req: Request, res: Response) => {
   const q = typeof req.query.q === "string" ? req.query.q.trim() : "";
 
@@ -888,7 +896,6 @@ export const grantScheduleAccess = async (req: Request, res: Response) => {
       .json({ success: false, message: "Loại tài khoản không hợp lệ" });
   }
 
-  // Bắt buộc: email phải là tài khoản đã tồn tại trong hệ thống
   const user = await prisma.user.findUnique({
     where: { email: email.trim().toLowerCase() },
   });

@@ -12,6 +12,7 @@ import countdownRouter from "./routes/countdown.router";
 import resourceRoutes from "./routes/resource.routes";
 import scheduleRoutes from "./routes/schedule.router";
 import pushRoutes from "./routes/push.routes";
+import scoreRoutes from "./routes/score.routes";
 import { startScheduleNotificationCron } from "./services/scheduleNotification.service";
 
 dotenv.config();
@@ -43,6 +44,7 @@ app.use("/api/countdown", countdownRouter);
 app.use("/api", resourceRoutes);
 app.use("/api/schedule", scheduleRoutes);
 app.use("/api/push", pushRoutes);
+app.use("/api/scores", scoreRoutes);
 
 app.get("/", (req, res) => {
   res.send("Backend API running...");
